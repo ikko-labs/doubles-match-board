@@ -308,7 +308,7 @@ nav button[aria-selected="true"]{color:var(--ink);border-top-color:var(--court);
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script>
 'use strict';
-const LOOK=8, POLL_MS=3000, API='/api/room';
+const LOOK=8, POLL_MS=5000, API='/api/room';
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const clone=o=>JSON.parse(JSON.stringify(o));
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
