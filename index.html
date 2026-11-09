@@ -61,9 +61,10 @@ h1,h2,h3,p{margin:0}
 .link{color:var(--ink);text-decoration:underline;text-underline-offset:3px;font-weight:700;padding:10px 0;text-align:left}
 
 /* ヘッダー */
-.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:9;background:var(--board);color:var(--on-board);padding-block:9px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:9;background:var(--board);color:var(--on-board);padding-block:3px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 .top>div{max-width:528px;margin:0 auto;display:flex;align-items:center;gap:10px}
-.top b{font-size:18px;font-weight:900;flex:1;min-width:0}
+.top b{font-size:18px;font-weight:900;white-space:nowrap}
+.toplink{min-height:44px;margin-right:auto;padding:0 6px;margin-left:-6px;border-radius:6px;color:var(--on-board);font-size:15px;font-weight:700;white-space:nowrap}
 #miniTimer{font:700 24px/1 var(--display);color:var(--digit)}
 #syncTag{font-size:13px;font-weight:700;color:var(--board-dim);white-space:nowrap}
 
@@ -199,7 +200,7 @@ nav button[aria-selected="true"]{color:var(--ink);border-top-color:var(--court);
 </section>
 
 <section id="app" hidden>
-  <header class="top"><div><b id="roundTitle"></b><span id="miniTimer"></span><span id="syncTag"></span></div></header>
+  <header class="top"><div><button class="toplink" id="homeLink" type="button">‹ 最初のページ</button><span id="syncTag"></span><b id="roundTitle"></b><span id="miniTimer"></span></div></header>
 
   <div class="wrap" data-tab="now">
     <div id="meBar" hidden></div>
@@ -257,7 +258,6 @@ nav button[aria-selected="true"]{color:var(--ink);border-top-color:var(--court);
       <div class="counts" id="countBox"></div>
     </div>
     <button class="btn" id="rebuildBtn" type="button" data-edit>今の試合から組み直す</button>
-    <button class="link" id="homeLink" type="button">新しい試合表を作る</button>
   </div>
 
   <div class="wrap" data-tab="share" hidden>
@@ -433,8 +433,7 @@ async function pull(force){
 }
 function setSync(s){
   const t=$('#syncTag');
-  if(!S.sync){t.textContent='お試し版';return}
-  t.textContent=s==='offline'?'再接続中':(editor()?'操作できます':'閲覧中');
+  t.textContent=S.sync&&s==='offline'?'再接続中':'';
 }
 let chain=Promise.resolve();
 function mutate(fn){chain=chain.then(()=>doMutate(fn)).catch(()=>toast('保存できませんでした'));return chain}
@@ -460,19 +459,48 @@ function stopPolling(){clearInterval(S.pollId)}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){pull();keepAwake()}});
 
 /* ---------- 音 ---------- */
-let audio=null;
-function unlockAudio(){
-  try{
-    if(navigator.audioSession)navigator.audioSession.type='playback';
-    audio=audio||new (window.AudioContext||window.webkitAudioContext)();
-    if(audio.state==='suspended')audio.resume();
-    const b=audio.createBufferSource();b.buffer=audio.createBuffer(1,1,22050);b.connect(audio.destination);b.start(0);
-  }catch{}
+let audio=null,el=null,elReady=false,elUnlocking=false,ringing=false;
+function buzzerBlob(){
+  const rate=22050,n=Math.floor(rate*2.1),buf=new ArrayBuffer(44+n*2),v=new DataView(buf);
+  const tag=(o,t)=>[...t].forEach((c,i)=>v.setUint8(o+i,c.charCodeAt(0)));
+  tag(0,'RIFF');v.setUint32(4,36+n*2,true);tag(8,'WAVEfmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);
+  v.setUint32(24,rate,true);v.setUint32(28,rate*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);tag(36,'data');v.setUint32(40,n*2,true);
+  const pulses=[[0,.5],[.62,.5],[1.24,.8]],freqs=[392,466,587];
+  for(let i=0;i<n;i++){
+    const t=i/rate,p=pulses.find(([a,l])=>t>=a&&t<a+l);
+    let x=0;
+    if(p){
+      const local=t-p[0],env=Math.min(1,local/.015,(p[1]-local)/.03);
+      x=freqs.reduce((sum,f)=>sum+2*((t*f)%1)-1,0)/3*env*.95;
+    }
+    v.setInt16(44+i*2,x*32767,true);
+  }
+  return new Blob([buf],{type:'audio/wav'});
 }
-document.addEventListener('pointerdown',unlockAudio,{passive:true});
-function ring(){
-  try{navigator.vibrate&&navigator.vibrate([500,150,500,150,700])}catch{}
-  if(!audio)return;
+function buzzerEl(){
+  if(!el){
+    el=new Audio(URL.createObjectURL(buzzerBlob()));
+    el.preload='auto';
+    el.addEventListener('ended',()=>{ringing=false});
+  }
+  return el;
+}
+function unlockAudio(){
+  if(elReady||elUnlocking||ringing)return;
+  try{
+    const a=buzzerEl();
+    elUnlocking=true;a.muted=true;
+    a.play().then(()=>{
+      elReady=true;elUnlocking=false;
+      if(!ringing){a.pause();a.currentTime=0}
+      a.muted=false;
+    }).catch(()=>{elUnlocking=false;a.muted=false});
+  }catch{elUnlocking=false}
+}
+['touchend','click'].forEach(t=>document.addEventListener(t,unlockAudio,{passive:true,capture:true}));
+function ringWeb(){
+  try{audio=audio||new (window.AudioContext||window.webkitAudioContext)()}catch{return false}
+  if(audio.state!=='running')audio.resume().catch(()=>{});
   const out=audio.createDynamicsCompressor();out.connect(audio.destination);
   const t0=audio.currentTime+.02;
   [[0,.5],[.62,.5],[1.24,.8]].forEach(([at,len])=>{
@@ -484,6 +512,17 @@ function ring(){
       o.connect(g);g.connect(out);o.start(t0+at);o.stop(t0+at+len+.02);
     });
   });
+  return true;
+}
+function ring(){
+  try{navigator.vibrate&&navigator.vibrate([500,150,500,150,700])}catch{}
+  const fallback=()=>{ringing=false;if(!ringWeb())toast('音を鳴らせませんでした。画面を一度押してからブザーを押してください')};
+  try{
+    const a=buzzerEl();
+    ringing=true;a.muted=false;
+    try{a.currentTime=0}catch{}
+    a.play().catch(fallback);
+  }catch{fallback()}
 }
 function flash(){const f=$('#flash');f.hidden=false;clearTimeout(flash.t);flash.t=setTimeout(()=>f.hidden=true,3500)}
 $('#flash').onclick=()=>$('#flash').hidden=true;
@@ -639,14 +678,14 @@ $('#startBtn').onclick=()=>{
   keepAwake();
 };
 $('#resetBtn').onclick=()=>mutate(resetTimer);
-$('#buzzBtn').onclick=()=>{unlockAudio();ring();S.lastBuzz=(S.state.buzz||0)+1;mutate(d=>{d.buzz=S.lastBuzz})};
+$('#buzzBtn').onclick=()=>{ring();S.lastBuzz=(S.state.buzz||0)+1;mutate(d=>{d.buzz=S.lastBuzz})};
 function pickDur(){
   const dur=+$('#minSel').value*60+(+$('#secSel').value),{running}=timerStatus();
   mutate(d=>{d.timer.dur=dur;d.timer.elapsed=0;d.timer.startAt=running?Math.round(serverNow()):null});
   document.activeElement?.blur?.();
 }
 $('#minSel').onchange=pickDur;$('#secSel').onchange=pickDur;
-$('#soundBtn').onclick=()=>{S.sound=!S.sound;store.set('doubles.sound.'+(S.room||'local'),S.sound);if(S.sound){unlockAudio();ring()}render()};
+$('#soundBtn').onclick=()=>{S.sound=!S.sound;store.set('doubles.sound.'+(S.room||'local'),S.sound);if(S.sound)ring();render()};
 function goNext(){mutate(d=>{d.cur++;while(d.rounds.length<d.cur+1+LOOK)d.rounds.push(buildRound(d,d.rounds));resetTimer(d)})}
 $('#nextBtn').onclick=e=>{
   if(timerStatus().running||e.currentTarget.dataset.armed)armed(e.currentTarget,'タイマー中。もう一度押す',goNext);
@@ -749,7 +788,7 @@ $('#shareBtn').onclick=async()=>{
   catch(e){if(e&&e.name!=='AbortError')toast('共有できませんでした。URLをコピーして送ってください')}
 };
 $('#copyEdit').onclick=()=>copy(`${baseUrl()}#${S.room}-${S.key}`);
-$('#homeLink').onclick=e=>armed(e.currentTarget,'もう一度押すと、この試合表を閉じます',()=>{location.hash='';route()});
+$('#homeLink').onclick=e=>armed(e.currentTarget,'もう一度押す',()=>{location.hash='';route()});
 $('#pastBtn').onclick=()=>{S.showPast=!S.showPast;renderTable()};
 $('#missingHome').onclick=()=>{location.hash='';route()};
 
