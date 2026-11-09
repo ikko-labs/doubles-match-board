@@ -1,0 +1,821 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+</head>
+<body>
+<title>ダブルス試合表</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Zen+Kaku+Gothic+New:wght@500;700;900&display=swap">
+<style>
+/* Layout: 上から縦に操作する1カラムのスマホ画面。コートは真上から見た図で、ネットを挟んで左右にペアを置く。 */
+:root{
+  --bg:#e8eef1; --surface:#ffffff; --ink:#10242f; --muted:#516a79; --hair:#cbd8df;
+  --court:#1b6a8f; --apron:#124e6b; --on-court:#ffffff; --court-line:#ffffffcc;
+  --board:#0f2533; --on-board:#f4f8fa; --board-dim:#9bb2c0; --digit:#ffd23f;
+  --team-a:#1b6a8f; --team-b:#b04a24; --ball:#ffd23f; --ball-ink:#2b2200; --go:#0d7f58; --on-go:#ffffff; --stop:#bf3329; --tint:#d9e7ee;
+  --display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --body:"Zen Kaku Gothic New","Hiragino Sans","Noto Sans JP",system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0c171e; --surface:#16252f; --ink:#eaf2f6; --muted:#9ab0bd; --hair:#2a3e4b;
+  --court:#1b5f80; --team-a:#1b5f80; --team-b:#a8462a; --apron:#113f57; --board:#16303f; --tint:#1d3442; --go:#0e7f59; --stop:#c8443a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0c171e; --surface:#16252f; --ink:#eaf2f6; --muted:#9ab0bd; --hair:#2a3e4b;
+  --court:#1b5f80; --team-a:#1b5f80; --team-b:#a8462a; --apron:#113f57; --board:#16303f; --tint:#1d3442; --go:#0e7f59; --stop:#c8443a; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font:500 16px/1.5 var(--body);-webkit-text-size-adjust:100%;font-variant-numeric:tabular-nums}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--board)}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none;touch-action:manipulation}
+:focus-visible{outline:3px solid var(--ball);outline-offset:2px}
+h1,h2,h3,p{margin:0}
+.wrap{grid-template-columns:minmax(0,1fr);max-width:560px;margin:0 auto;padding-block:12px 104px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:14px}
+.num{font-family:var(--display);font-weight:700;line-height:1}
+.label{font-size:14px;font-weight:700;color:var(--muted);letter-spacing:.04em}
+.note{font-size:14px;color:var(--muted)}
+
+/* ホーム */
+#home .wrap{padding-block:28px 40px;gap:20px}
+#home h1{font-size:30px;font-weight:900;letter-spacing:.01em;text-wrap:balance}
+.setting{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--surface);border-radius:8px;padding:12px 14px}
+.setting>span,.setting>label{font-size:18px;font-weight:700}
+.courtsel{min-height:48px;border:0;border-radius:8px;padding:0 10px;background:var(--tint);color:var(--ink);font-size:24px;font-weight:900}
+.courtsel:disabled{opacity:1}
+.stepper{display:flex;align-items:center;gap:6px}
+.stepper button{width:56px;height:56px;border-radius:8px;background:var(--tint);font:700 32px/1 var(--display)}
+.stepper button:disabled{opacity:.35}
+.stepper output{min-width:68px;text-align:center;font:700 54px/1 var(--display)}
+.preview{display:flex;flex-wrap:wrap;gap:8px;align-items:center;min-height:62px}
+.mini{width:112px;height:40px;border:2px solid var(--court-line);display:grid;grid-template-columns:1fr 1fr;position:relative}
+.mini::after{content:"";position:absolute;top:0;bottom:0;left:calc(50% - 1px);width:2px;background:var(--on-court)}
+.mini div{display:grid;grid-template-columns:1fr 1fr;place-items:center;background:var(--team-a)}
+.mini div+div{background:var(--team-b)}
+.dot{width:12px;height:12px;border-radius:50%;background:var(--ball);display:block}
+.big{width:100%;min-height:64px;border-radius:8px;font-size:20px;font-weight:900;background:var(--go);color:var(--on-go)}
+.big:disabled{opacity:.6}
+.link{color:var(--ink);text-decoration:underline;text-underline-offset:3px;font-weight:700;padding:10px 0;text-align:left}
+
+/* ヘッダー */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:9;background:var(--board);color:var(--on-board);padding-block:9px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.top>div{max-width:528px;margin:0 auto;display:flex;align-items:center;gap:10px}
+.top b{font-size:18px;font-weight:900;flex:1;min-width:0}
+#miniTimer{font:700 24px/1 var(--display);color:var(--digit)}
+#syncTag{font-size:13px;font-weight:700;color:var(--board-dim);white-space:nowrap}
+
+/* タイマー */
+.board{background:var(--board);color:var(--on-board);border-radius:8px;padding:8px 14px 12px;display:grid;grid-template-columns:minmax(0,1fr);gap:9px}
+#clock{font:700 clamp(76px,24vw,120px)/.95 var(--display);text-align:center;color:var(--digit);letter-spacing:.01em}
+#clock.over{color:var(--on-board);animation:blink 1s steps(2) infinite}
+@keyframes blink{50%{opacity:.35}}
+.row{display:flex;gap:8px}
+.row>*{flex:1;min-width:0}
+.ctl{min-height:54px;border-radius:8px;padding:0 4px;white-space:nowrap;font-size:clamp(15px,4.6vw,18px);font-weight:900;background:#ffffff1f;color:var(--on-board)}
+.ctl.main{flex:1.7;background:var(--go);color:var(--on-go)}
+.ctl.main.pause{background:var(--stop)}
+.ctl.buzz{background:var(--ball);color:var(--ball-ink)}
+.chips{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+.chip{min-height:44px;padding:0 8px;border-radius:999px;background:#ffffff1f;color:var(--on-board);font-size:14px;font-weight:700;white-space:nowrap}
+.chip[aria-pressed="true"]{background:var(--on-board);color:var(--board)}
+#soundBtn{margin-left:auto}
+.screen-note{font-size:14px;line-height:1.45;color:var(--board-dim)}
+.check-note{font-size:14px;font-weight:700;color:var(--digit)}
+.goal{display:flex;align-items:center;gap:5px;font-size:14px;font-weight:700}
+.goal select{min-height:44px;border:0;border-radius:8px;padding:0 6px;background:#ffffff1f;color:var(--on-board);font-size:16px;font-weight:700}
+.goal select option{background:var(--surface);color:var(--ink)}
+
+/* コート */
+#meBar{background:var(--ball);color:var(--ball-ink);border-radius:8px;padding:10px 14px;font-weight:900;font-size:18px}
+.courts{display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
+.court{background:var(--apron);padding:6px 8px 8px;border-radius:8px}
+.court h3{font-size:14px;font-weight:700;color:var(--on-court);padding:0 2px 5px}
+.field{display:grid;grid-template-columns:minmax(0,1fr) 4px minmax(0,1fr);border:2px solid var(--court-line)}
+.pair{display:grid;grid-template-columns:minmax(0,1fr) 18px minmax(0,1fr);align-items:center;padding:3px}
+.pair.a{background:var(--team-a)}
+.pair.b{background:var(--team-b)}
+.pair>i{font-style:normal;text-align:center;color:var(--on-court);font-size:15px;font-weight:900}
+.net{background:var(--on-court);position:relative;z-index:1}
+.net span{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:var(--on-court);color:var(--board);border-radius:999px;padding:0 5px;font-size:13px;font-weight:900;line-height:22px;white-space:nowrap}
+.tile{position:relative;display:flex;align-items:center;gap:8px;min-height:54px;padding:4px 2px;color:var(--on-court);text-align:left;width:100%;min-width:0;border-radius:5px}
+.tile b{font:700 clamp(36px,12vw,52px)/1 var(--display)}
+.tile.me{background:var(--ball);color:var(--ball-ink)}
+.pair .tile:first-child{flex-direction:row-reverse;text-align:right}
+.pair .tile:first-child b{text-align:right}
+.op{display:grid;grid-template-columns:1.25fr 3fr;gap:8px;position:sticky;bottom:calc(61px + env(safe-area-inset-bottom,0px));z-index:5;background:var(--bg);padding-block:8px}
+.op button{min-height:60px;border-radius:8px;font-size:15px;font-weight:900;background:var(--tint);white-space:nowrap;padding:0 4px}
+.op .fwd{background:var(--go);color:var(--on-go);font-size:20px}
+.op button:disabled{opacity:.4}
+.op .fwd.ready{background:var(--ball);color:var(--ball-ink)}
+.ctl.main.again{background:#ffffff1f;color:var(--on-board)}
+[data-armed]{background:var(--stop)!important;color:#fff!important}
+.hint{font-size:15px;font-weight:700;color:var(--ink)}
+
+/* 試合表 */
+.tablebox{overflow-x:auto;background:var(--surface);border-radius:8px}
+table{border-collapse:collapse;width:100%;white-space:nowrap}
+th,td{padding:9px 7px;text-align:left;border-bottom:1px solid var(--hair)}
+th{font-size:14px;color:var(--muted)}
+td{font:700 21px/1.1 var(--display)}
+td:first-child,th:first-child{position:sticky;left:0;background:var(--surface);text-align:center}
+tr.past td{color:var(--muted);font-weight:600}
+tr.cur td,tr.cur td:first-child{background:var(--tint)}
+td i{font-style:normal;color:var(--muted);font-size:15px;padding:0 3px}
+td .n{border-radius:2px}
+.cells{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 10px;font-size:19px}
+.cells small{font:700 14px var(--body);color:var(--muted);margin-right:3px}
+td .n.mine{background:var(--ball);color:var(--ball-ink);box-shadow:0 0 0 2px var(--ball)}
+
+/* メンバー */
+.addform{display:flex;gap:10px;align-items:center;background:var(--surface);padding:10px;border-radius:8px}
+.addform .stepper button{width:50px;height:52px}
+.addform .stepper output{min-width:46px;font-size:40px}
+#addBtn{flex:1;min-width:0;min-height:52px;padding:0 10px;border-radius:8px;background:var(--go);color:var(--on-go);font-weight:900;white-space:nowrap}
+.counts{display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:6px}
+.counts button{display:flex;align-items:baseline;justify-content:space-between;gap:4px;background:var(--tint);border-radius:6px;padding:4px 9px;min-height:44px}
+.counts button.mine{background:var(--ball);color:var(--ball-ink)}
+.counts b{font:700 28px/1.2 var(--display)}
+.counts span{font-size:14px;font-weight:700}
+
+.numgrid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px}
+.numgrid button{min-height:44px;border-radius:6px;background:var(--tint);color:var(--ink);font:700 24px/1 var(--display)}
+.numgrid button[aria-pressed="true"]{background:var(--stop);color:#fff}
+#backGrid button{background:none;box-shadow:inset 0 0 0 1px var(--hair);color:var(--muted);text-decoration:line-through}
+#leaveBtn{min-height:52px;border-radius:8px;background:var(--stop);color:#fff;font-weight:900;padding:4px 12px}
+#leaveBtn:disabled{background:var(--tint);color:var(--muted)}
+.counts button.left{opacity:.5}
+
+/* 共有 */
+.panel{background:var(--surface);border-radius:8px;padding:16px;display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+.panel h2{font-size:18px;font-weight:900}
+.qr{background:#fff;padding:10px;width:min(100%,220px);margin:0 auto;border-radius:6px}
+.qr svg{display:block;width:100%;height:auto}
+.btn{min-height:52px;border-radius:8px;background:var(--tint);font-weight:900;padding:0 14px}
+.btn{display:flex;align-items:center;justify-content:center;text-decoration:none;color:var(--ink);text-align:center}
+.urlrow{display:flex;gap:8px}
+.urlrow input{flex:1;min-width:0;min-height:52px;border:1px solid var(--hair);border-radius:6px;padding:0 10px;background:var(--bg);color:var(--muted);font-size:16px}
+.urlrow .btn{white-space:nowrap}
+details summary{font-weight:700;cursor:pointer;min-height:44px;line-height:44px}
+details>div{display:grid;gap:12px;padding-top:6px}
+
+/* ナビ */
+nav{position:fixed;left:0;right:0;bottom:0;z-index:9;background:var(--surface);border-top:1px solid var(--hair);padding-bottom:env(safe-area-inset-bottom,0px);padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}
+nav>div{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(3,1fr)}
+nav button{min-height:60px;font-size:15px;font-weight:700;color:var(--muted);border-top:3px solid transparent}
+nav button[aria-selected="true"]{color:var(--ink);border-top-color:var(--court);font-weight:900}
+
+/* シート・通知 */
+.scrim{position:fixed;inset:0;z-index:20;background:#0009;display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:var(--surface);width:100%;max-width:560px;border-radius:12px 12px 0 0;display:grid;gap:12px;padding-block:18px calc(18px + env(safe-area-inset-bottom,0px));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.sheet h2{font-size:26px;font-weight:900}
+#toast{position:fixed;left:50%;transform:translateX(-50%);top:calc(60px + env(safe-area-inset-top,0px));z-index:30;width:max-content;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-weight:700;max-width:calc(100% - 32px)}
+#flash{position:fixed;inset:0;z-index:40;background:var(--ball);color:var(--ball-ink);display:grid;place-items:center;font-size:clamp(64px,22vw,140px);font-weight:900;width:100%}
+@media (prefers-reduced-motion:reduce){#clock.over{animation:none}}
+</style>
+
+<section id="home" hidden>
+  <div class="wrap">
+    <h1>ダブルス試合表</h1>
+    <div class="setting"><span>コート数</span><div class="stepper">
+      <button id="cMinus" type="button" aria-label="コートを減らす">−</button><output id="cVal">2</output><button id="cPlus" type="button" aria-label="コートを増やす">＋</button></div></div>
+    <div class="setting"><span>人数</span><div class="stepper">
+      <button id="nMinus" type="button" aria-label="人数を減らす">−</button><output id="nVal">9</output><button id="nPlus" type="button" aria-label="人数を増やす">＋</button></div></div>
+    <div class="preview" id="preview" aria-hidden="true"></div>
+    <p class="note" id="hint"></p>
+    <button class="big" id="createBtn" type="button">組み合わせを作る</button>
+    <p class="note" id="homeNote" hidden></p>
+  </div>
+</section>
+
+<section id="missing" hidden>
+  <div class="wrap">
+    <h1 style="font-size:24px;font-weight:900">試合表が見つかりません</h1>
+    <p class="note">最後の更新から3日たつと、試合表は自動で削除されます。QRコードが正しいかご確認ください。</p>
+    <button class="big" id="missingHome" type="button">新しく作る</button>
+  </div>
+</section>
+
+<section id="app" hidden>
+  <header class="top"><div><b id="roundTitle"></b><span id="miniTimer"></span><span id="syncTag"></span></div></header>
+
+  <div class="wrap" data-tab="now">
+    <div id="meBar" hidden></div>
+    <div class="board">
+      <div id="clock" role="timer">10:00</div>
+      <div class="row" data-edit>
+        <button class="ctl main" id="startBtn" type="button">スタート</button>
+        <button class="ctl" id="resetBtn" type="button">リセット</button>
+        <button class="ctl buzz" id="buzzBtn" type="button">ブザー</button>
+      </div>
+      <div class="chips">
+        <span class="goal" data-edit><label for="minSel">時間</label>
+          <select id="minSel" aria-label="試合時間（分）"></select>
+          <select id="secSel" aria-label="試合時間（秒）"></select></span>
+        <button class="chip" id="soundBtn" type="button"></button>
+      </div>
+      <p class="check-note" data-edit>音量チェックとして、ブザーを鳴らしてね。</p>
+      <p class="screen-note">画面を消すとブザーは鳴りません。タイマー中は画面をつけたままにしてください。</p>
+    </div>
+    <p class="hint" id="meHint" hidden>自分の番号を押すと、出番が黄色で分かります。</p>
+    <div class="courts" id="courts"></div>
+    <div class="op" data-edit>
+      <button id="prevBtn" type="button">前の試合へ</button>
+      <button class="fwd" id="nextBtn" type="button">次の試合へ</button>
+    </div>
+  </div>
+
+  <div class="wrap" data-tab="table" hidden>
+    <div class="addform" id="addForm">
+      <div class="stepper">
+        <button id="addMinus" type="button" aria-label="追加する人数を減らす">−</button><output id="addVal">1</output><button id="addPlus" type="button" aria-label="追加する人数を増やす">＋</button>
+      </div>
+      <button id="addBtn" type="button">1人追加</button>
+    </div>
+    <p class="note" id="tableNote"></p>
+    <div class="setting">
+      <label for="courtSel">コート数</label>
+      <select class="courtsel" id="courtSel"><option value="1">1コート</option><option value="2">2コート</option><option value="3">3コート</option><option value="4">4コート</option><option value="5">5コート</option><option value="6">6コート</option></select>
+    </div>
+    <div class="panel" id="leavePanel" data-edit>
+      <details id="leaveBox"><summary>抜ける人を選ぶ<span id="leftCount"></span></summary><div>
+        <p class="note">抜ける番号をすべて押してから、下のボタンで確定します。次の試合から外れます。</p>
+        <div class="numgrid" id="leaveGrid"></div>
+        <button id="leaveBtn" type="button" disabled>番号を選んでください</button>
+        <div id="backBox" hidden style="display:grid;gap:8px">
+          <p class="label">抜けた人（押すと次の試合から戻ります）</p>
+          <div class="numgrid" id="backGrid"></div>
+        </div>
+      </div></details>
+    </div>
+    <button class="link" id="pastBtn" type="button" hidden></button>
+    <div class="tablebox" id="tableBox"></div>
+    <div class="panel">
+      <p class="label">試合数（今の試合まで）</p>
+      <div class="counts" id="countBox"></div>
+    </div>
+    <button class="btn" id="rebuildBtn" type="button" data-edit>今の試合から組み直す</button>
+    <button class="link" id="homeLink" type="button">新しい試合表を作る</button>
+  </div>
+
+  <div class="wrap" data-tab="share" hidden>
+    <div class="panel" id="sharePanel">
+      <h2>他の人にこの試合表を共有する</h2>
+      <p class="note">相手のスマホのカメラでQRコードを読み取ってもらうと、同じ試合表が開きます。アプリやログインは必要ありません。</p>
+      <div class="qr" id="qrView"></div>
+      <button class="big" id="shareBtn" type="button" hidden>共有する</button>
+      <div class="row">
+        <a class="btn" id="lineBtn" target="_blank" rel="noopener">LINEで送る</a>
+        <a class="btn" id="xBtn" target="_blank" rel="noopener">Xに投稿する</a>
+      </div>
+      <div class="urlrow">
+        <input id="urlView" readonly aria-label="共有用のURL">
+        <button class="btn" id="copyView" type="button">URLをコピー</button>
+      </div>
+      <p class="note">コピーしたURLは、メールやメッセージなど好きな連絡手段に貼り付けて送れます。</p>
+    </div>
+    <div class="panel" id="localPanel" hidden>
+      <h2>お試し版では他の人に共有できません</h2>
+      <p class="note">このページは、このスマホの中だけで動いています。他の人と同じ試合表を見るには、公開した版を使ってください。</p>
+    </div>
+    <div class="panel" id="editPanel" hidden>
+      <details id="editShare"><summary>タイマーや試合の進行も他の人に任せる</summary><div>
+        <div class="qr" id="qrEdit"></div>
+        <p class="note">このQRコードを読み取った人は、タイマーや試合の進行を操作できます。ページを閉じたあとに自分が操作へ戻るときも、このリンクを使います。</p>
+        <button class="btn" id="copyEdit" type="button">操作用リンクをコピー</button>
+      </div></details>
+    </div>
+  </div>
+
+  <nav><div role="tablist">
+    <button type="button" role="tab" data-go="now">試合</button>
+    <button type="button" role="tab" data-go="table">試合表</button>
+    <button type="button" role="tab" data-go="share">他の人に共有</button>
+  </div></nav>
+</section>
+
+<div class="scrim" id="scrim" hidden><div class="sheet" role="dialog" aria-modal="true">
+  <h2 id="sheetTitle"></h2>
+  <button class="btn" id="sheetActive" type="button" data-edit></button>
+  <button class="btn" id="sheetMe" type="button"></button>
+  <button class="btn" id="sheetClose" type="button">閉じる</button>
+</div></div>
+<div id="toast" role="status" hidden></div>
+<button id="flash" type="button" hidden>時間です</button>
+
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<script>
+'use strict';
+const LOOK=8, POLL_MS=3000, API='/api/room';
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const clone=o=>JSON.parse(JSON.stringify(o));
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const store={get(k){try{return JSON.parse(localStorage.getItem(k))}catch{return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}}};
+const randId=n=>{const a='abcdefghjkmnpqrstuvwxyz23456789',b=crypto.getRandomValues(new Uint8Array(n));return [...b].map(x=>a[x%a.length]).join('')};
+
+/* ---------- 組み合わせ ---------- */
+const pk=(a,b)=>a<b?a+'|'+b:b+'|'+a;
+const bump=(m,a,b)=>{const k=pk(a,b);m.set(k,(m.get(k)||0)+1)};
+function tally(rounds){
+  const t={played:{},last:{},partner:new Map,opp:new Map,rp:new Map,ro:new Map};
+  rounds.forEach((r,i)=>{
+    const recent=i>=rounds.length-2;
+    r.courts.forEach(([[a,b],[x,y]])=>{
+      [a,b,x,y].forEach(p=>{t.played[p]=(t.played[p]||0)+1;t.last[p]=i});
+      [[a,b],[x,y]].forEach(([p,q])=>{bump(t.partner,p,q);if(recent)bump(t.rp,p,q)});
+      [[a,x],[a,y],[b,x],[b,y]].forEach(([p,q])=>{bump(t.opp,p,q);if(recent)bump(t.ro,p,q)});
+    });
+  });
+  return t;
+}
+function courtCost(s,i,t){
+  const a=s[i],b=s[i+1],x=s[i+2],y=s[i+3];let c=0;
+  for(const [p,q] of [[a,b],[x,y]]){const k=pk(p,q),n=t.partner.get(k)||0;c+=n*n*10+(t.rp.get(k)||0)*30}
+  for(const [p,q] of [[a,x],[a,y],[b,x],[b,y]]){const k=pk(p,q),n=t.opp.get(k)||0;c+=n*n*2+(t.ro.get(k)||0)*3}
+  return c;
+}
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function arrange(ids,t){
+  const count=ids.length/4;let best=null,bestC=Infinity;
+  for(let r=0;r<14;r++){
+    const s=shuffle(ids.slice());
+    for(let n=0;n<500&&count>0;n++){
+      const i=Math.floor(Math.random()*s.length),j=Math.floor(Math.random()*s.length);
+      if(i===j)continue;
+      const ci=i-i%4,cj=j-j%4;
+      const before=courtCost(s,ci,t)+(ci===cj?0:courtCost(s,cj,t));
+      [s[i],s[j]]=[s[j],s[i]];
+      const after=courtCost(s,ci,t)+(ci===cj?0:courtCost(s,cj,t));
+      if(after>before)[s[i],s[j]]=[s[j],s[i]];
+    }
+    let c=0;for(let i=0;i<s.length;i+=4)c+=courtCost(s,i,t);
+    if(c<bestC){bestC=c;best=s.slice()}
+  }
+  const courts=[];for(let i=0;i<best.length;i+=4)courts.push([[best[i],best[i+1]],[best[i+2],best[i+3]]]);
+  return courts;
+}
+function buildRound(st,prior){
+  const active=st.players.filter(p=>p.active);
+  const need=Math.min(st.courtNos.length,Math.floor(active.length/4))*4;
+  const nos=st.courtNos.slice(0,need/4);
+  if(need<4)return{courts:[],nos:[],rest:active.map(p=>p.id)};
+  const t=tally(prior);
+  const eff=p=>(p.base||0)+(t.played[p.id]||0);
+  // まだ1試合もしていない人を番号順に入れ、足りない枠と以降の試合はランダムに組む
+  const seq=active.filter(p=>eff(p)===0).sort((a,b)=>a.no-b.no).slice(0,need).map(p=>p.id),inSeq=new Set(seq);
+  const order=shuffle(active.filter(p=>!inSeq.has(p.id))).sort((a,b)=>eff(a)-eff(b)||(t.last[a.id]??-1)-(t.last[b.id]??-1));
+  let used=0;
+  while(seq.length%4)seq.push(order[used++].id);
+  const courts=[];
+  for(let i=0;i<seq.length;i+=4)courts.push([[seq[i],seq[i+1]],[seq[i+2],seq[i+3]]]);
+  const on=order.slice(used,used+need-seq.length).map(p=>p.id);
+  if(on.length)courts.push(...arrange(on,t));
+  return{courts,nos,rest:order.slice(used+on.length).map(p=>p.id)};
+}
+function avgGames(st){
+  const t=tally(st.rounds.slice(0,st.cur+1));
+  const a=st.players.filter(p=>p.active&&p.base!=null);
+  if(!a.length)return 0;
+  return Math.floor(a.reduce((s,p)=>s+p.base+(t.played[p.id]||0),0)/a.length);
+}
+function regen(st,from=st.cur+1){
+  const avg=avgGames(st);
+  st.players.forEach(p=>{if(p.base==null)p.base=avg});
+  st.rounds.length=Math.min(st.rounds.length,from);
+  while(st.rounds.length<st.cur+1+LOOK)st.rounds.push(buildRound(st,st.rounds));
+}
+function absorb(st){if(st.players.some(p=>p.base==null))regen(st)}
+function newState(courts,n){
+  const players=Array.from({length:n},(_,i)=>({id:'p'+(i+1),no:i+1,active:true,base:0}));
+  const st={v:1,courtNos:Array.from({length:courts},(_,i)=>i+1),players,rounds:[],cur:0,timer:{dur:600,elapsed:0,startAt:null},buzz:0};
+  regen(st,0);return st;
+}
+function merged(raw,joins){
+  const st=clone(raw),have=new Set(st.players.map(p=>p.id));
+  if(st.timer&&(st.timer.startAt===undefined||!(st.timer.dur>0)))st.timer={dur:st.timer.dur>0?st.timer.dur:600,elapsed:0,startAt:null};
+  if(!st.courtNos)st.courtNos=Array.from({length:st.courts||1},(_,i)=>i+1);
+  st.rounds.forEach(r=>{if(!r.nos)r.nos=r.courts.map((_,i)=>i+1)});
+  let no=Math.max(0,...st.players.map(p=>p.no));
+  for(const j of joins||[]){
+    if(!j||!j.id||have.has(j.id))continue;
+    have.add(j.id);st.players.push({id:String(j.id),no:++no,active:true,base:null});
+  }
+  return st;
+}
+
+/* ---------- 同期 ---------- */
+const S={sync:false,storageReady:false,room:null,key:null,raw:null,joins:[],state:null,rev:0,offset:0,bestRtt:1e9,writing:false,tab:'now',me:null,sound:false,lastBuzz:null,lastDone:null,lastStart:null,sheet:null,addN:1,leave:new Set(),showPast:false,timerId:null,pollId:null};
+const editor=()=>!S.sync||!!S.key;
+const serverNow=()=>Date.now()+S.offset;
+
+async function api(method,qs,body){
+  const r=await fetch(API+qs,{method,headers:body?{'content-type':'application/json'}:undefined,body:body?JSON.stringify(body):undefined,cache:'no-store'});
+  const j=await r.json();
+  return{status:r.status,...j};
+}
+async function pull(force){
+  if(!S.sync||!S.room||(S.writing&&!force))return;
+  const t0=Date.now();
+  let r;
+  try{r=await api('GET',`?id=${S.room}&rev=${force?-1:S.rev}`)}catch{setSync('offline');return}
+  const t1=Date.now(),rtt=t1-t0;
+  if(rtt<=S.bestRtt*1.3){S.bestRtt=Math.min(S.bestRtt,rtt);S.offset=r.now-(t0+t1)/2}
+  setSync('ok');
+  if(r.same)return;
+  if(!r.state){showOnly('missing');stopPolling();return}
+  if(S.writing&&!force)return;
+  S.rev=r.rev;S.raw=r.state;S.joins=r.joins||[];
+  S.state=merged(S.raw,S.joins);
+  onState();
+  if(editor()&&S.state.players.some(p=>p.base==null))mutate(()=>{});
+}
+function setSync(s){
+  const t=$('#syncTag');
+  if(!S.sync){t.textContent='お試し版';return}
+  t.textContent=s==='offline'?'再接続中':(editor()?'操作できます':'閲覧中');
+}
+let chain=Promise.resolve();
+function mutate(fn){chain=chain.then(()=>doMutate(fn)).catch(()=>toast('保存できませんでした'));return chain}
+async function doMutate(fn){
+  if(!S.sync){fn(S.state);absorb(S.state);onState();return}
+  S.writing=true;
+  try{
+    for(let i=0;i<5;i++){
+      const d=clone(S.state);fn(d);absorb(d);
+      S.state=d;onState();
+      const r=await api('POST','',{id:S.room,key:S.key,base:S.rev,state:d});
+      if(r.rev){S.rev=r.rev;S.raw=d;return}
+      if(r.error==='forbidden'){toast('操作用のリンクではありません');await pull(true);return}
+      if(r.error!=='conflict'){toast('保存できませんでした');await pull(true);return}
+      await pull(true);
+    }
+    toast('混み合っています。もう一度お試しください');
+  }catch{toast('通信できません。電波を確認してください');await pull(true)}
+  finally{S.writing=false}
+}
+function startPolling(){stopPolling();if(S.sync)S.pollId=setInterval(()=>{if(!document.hidden)pull()},POLL_MS)}
+function stopPolling(){clearInterval(S.pollId)}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){pull();keepAwake()}});
+
+/* ---------- 音 ---------- */
+let audio=null;
+function unlockAudio(){
+  try{
+    if(navigator.audioSession)navigator.audioSession.type='playback';
+    audio=audio||new (window.AudioContext||window.webkitAudioContext)();
+    if(audio.state==='suspended')audio.resume();
+    const b=audio.createBufferSource();b.buffer=audio.createBuffer(1,1,22050);b.connect(audio.destination);b.start(0);
+  }catch{}
+}
+document.addEventListener('pointerdown',unlockAudio,{passive:true});
+function ring(){
+  try{navigator.vibrate&&navigator.vibrate([500,150,500,150,700])}catch{}
+  if(!audio)return;
+  const out=audio.createDynamicsCompressor();out.connect(audio.destination);
+  const t0=audio.currentTime+.02;
+  [[0,.5],[.62,.5],[1.24,.8]].forEach(([at,len])=>{
+    [392,466,587].forEach(f=>{
+      const o=audio.createOscillator(),g=audio.createGain();
+      o.type='sawtooth';o.frequency.value=f;
+      g.gain.setValueAtTime(0,t0+at);g.gain.linearRampToValueAtTime(.34,t0+at+.015);
+      g.gain.setValueAtTime(.34,t0+at+len-.03);g.gain.linearRampToValueAtTime(0,t0+at+len);
+      o.connect(g);g.connect(out);o.start(t0+at);o.stop(t0+at+len+.02);
+    });
+  });
+}
+function flash(){const f=$('#flash');f.hidden=false;clearTimeout(flash.t);flash.t=setTimeout(()=>f.hidden=true,3500)}
+$('#flash').onclick=()=>$('#flash').hidden=true;
+let lock=null;
+async function keepAwake(){try{if(navigator.wakeLock&&!document.hidden&&!lock){lock=await navigator.wakeLock.request('screen');lock.addEventListener('release',()=>lock=null)}}catch{}}
+
+/* ---------- タイマー ---------- */
+function elapsed(){
+  const t=S.state?.timer;if(!t)return 0;
+  return t.elapsed+(t.startAt?Math.max(0,(serverNow()-t.startAt)/1000):0);
+}
+const fmt=sec=>{const s=Math.ceil(sec);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')};
+const timerStatus=()=>{
+  const t=S.state.timer,el=elapsed(),done=t.dur>0&&el>=t.dur;
+  return{t,el,done,running:!!t.startAt&&!done};
+};
+function resetTimer(d){d.timer.elapsed=0;d.timer.startAt=null}
+function tick(){
+  if(!S.state)return;
+  const{t,el,done,running}=timerStatus();
+  const text=fmt(Math.max(0,t.dur-el));
+  if($('#clock').textContent!==text)$('#clock').textContent=text;
+  if($('#miniTimer').textContent!==text)$('#miniTimer').textContent=text;
+  $('#clock').classList.toggle('over',done);
+  const b=$('#startBtn'),label=running?'一時停止':(done?'もう一度':(el>0?'再開':'スタート'));
+  if(b.textContent!==label)b.textContent=label;
+  b.classList.toggle('pause',running);
+  b.classList.toggle('again',done);
+  $('#nextBtn').classList.toggle('ready',done);
+  if(t.startAt&&S.lastStart===t.startAt&&S.lastDone===false&&done&&el-t.dur<8){
+    if(S.sound)ring();
+    flash();
+  }
+  S.lastStart=t.startAt;S.lastDone=done;
+}
+function renderGoal(){
+  const dur=S.state.timer.dur,m=$('#minSel'),s=$('#secSel');
+  if(!m.options.length){
+    m.innerHTML=Array.from({length:60},(_,i)=>`<option value="${i+1}">${i+1}分</option>`).join('');
+    s.innerHTML=[0,15,30,45].map(v=>`<option value="${v}">${String(v).padStart(2,'0')}秒</option>`).join('');
+  }
+  if(document.activeElement!==m)m.value=Math.floor(dur/60);
+  if(document.activeElement!==s)s.value=dur%60;
+}
+
+/* ---------- 描画 ---------- */
+const P=id=>S.state.players.find(p=>p.id===id)||{id,no:'?',name:'',active:true};
+function tile(id){const p=P(id);return `<button class="tile${id===S.me?' me':''}" type="button" data-p="${esc(id)}" aria-label="${esc(p.no)}番"><b>${esc(p.no)}</b></button>`}
+function onState(){
+  const st=S.state;if(!st)return;
+  if(S.lastBuzz==null)S.lastBuzz=st.buzz;
+  else if(st.buzz!==S.lastBuzz){S.lastBuzz=st.buzz;if(S.sound)ring()}
+  render();tick();
+}
+function render(){
+  const st=S.state,round=st.rounds[st.cur]||{courts:[],rest:[]},nx=st.rounds[st.cur+1];
+  $('#roundTitle').textContent=`第${st.cur+1}試合`;
+  renderGoal();
+  $('#soundBtn').textContent=S.sound?'音：オン':'音：オフ';
+  $('#soundBtn').setAttribute('aria-pressed',S.sound);
+  $('#courts').innerHTML=round.courts.length?round.courts.map((c,i)=>`<article class="court"><h3>コート${round.nos[i]}</h3><div class="field"><div class="pair a">${tile(c[0][0])}<i>＆</i>${tile(c[0][1])}</div><div class="net"><span>対</span></div><div class="pair b">${tile(c[1][0])}<i>＆</i>${tile(c[1][1])}</div></div></article>`).join(''):'<p class="note">試合には4人以上が必要です。試合表タブで人数を追加してください。</p>';
+  $('#prevBtn').disabled=st.cur===0;
+  const me=S.me&&st.players.some(p=>p.id===S.me)?P(S.me):null;
+  const bar=$('#meBar');
+  if(me){
+    const where=r=>{const i=(r?.courts||[]).findIndex(c=>c.flat().includes(me.id));return i>=0?`コート${r.nos[i]}`:'休み'};
+    bar.hidden=false;bar.textContent=`${me.no}番　今：${where(round)}　次：${nx?where(nx):'−'}`;
+  }else bar.hidden=true;
+  $('#meHint').hidden=editor()||!!me;
+  renderTable();renderSetup();
+  $$('[data-edit]').forEach(e=>e.hidden=!editor());
+}
+function renderTable(){
+  const st=S.state,from=S.showPast?0:Math.max(0,st.cur-1),shown=st.rounds.slice(from);
+  const cols=[...new Set(shown.flatMap(r=>r.nos))].sort((a,b)=>a-b),multi=cols.length>=3;
+  const mark=c=>String.fromCharCode(0x2460+c-1);
+  const num=id=>id===S.me?`<span class="n mine">${esc(P(id).no)}</span>`:esc(P(id).no);
+  const pair=m=>`${num(m[0][0])}・${num(m[0][1])}<i>対</i>${num(m[1][0])}・${num(m[1][1])}`;
+  let h='<table><thead><tr><th>試合</th>'+(multi?`<th>コート ${cols.map(mark).join('')}</th>`:cols.map(c=>`<th>コート${c}</th>`).join(''))+'</tr></thead><tbody>';
+  shown.forEach((r,k)=>{
+    const i=from+k;
+    h+=`<tr class="${i<st.cur?'past':i===st.cur?'cur':''}"><td>${i+1}</td>`;
+    if(multi)h+=`<td><div class="cells">${r.courts.map((m,x)=>`<span><small>${mark(r.nos[x])}</small>${pair(m)}</span>`).join('')}</div></td>`;
+    else for(const c of cols){const m=r.courts[r.nos.indexOf(c)];h+=m?`<td>${pair(m)}</td>`:'<td></td>'}
+    h+='</tr>';
+  });
+  $('#tableBox').innerHTML=h+'</tbody></table>';
+  const pb=$('#pastBtn');
+  pb.hidden=st.cur<2;
+  pb.textContent=S.showPast?'これまでの試合を閉じる':`これまでの試合を見る（${st.cur-1}試合）`;
+}
+function renderSetup(){
+  const st=S.state;
+  $('#addVal').textContent=S.addN;
+  $('#addBtn').textContent=`${S.addN}人追加`;
+  $('#addMinus').disabled=S.addN<=1;
+  $('#addPlus').disabled=S.addN>=20;
+  const cs=$('#courtSel');
+  cs.disabled=!editor();
+  if(document.activeElement!==cs)cs.value=st.courtNos.length;
+  const act=st.players.filter(p=>p.active),out=st.players.filter(p=>!p.active);
+  [...S.leave].forEach(id=>{if(!act.some(p=>p.id===id))S.leave.delete(id)});
+  $('#leaveGrid').innerHTML=act.map(p=>`<button type="button" data-leave="${esc(p.id)}" aria-pressed="${S.leave.has(p.id)}">${esc(p.no)}</button>`).join('');
+  $('#backGrid').innerHTML=out.map(p=>`<button type="button" data-back="${esc(p.id)}" aria-label="${esc(p.no)}番を戻す">${esc(p.no)}</button>`).join('');
+  $('#backBox').hidden=!out.length;
+  $('#leftCount').textContent=out.length?`（今${out.length}人抜けています）`:'';
+  const picked=act.filter(p=>S.leave.has(p.id)).map(p=>p.no),lb=$('#leaveBtn');
+  lb.disabled=!picked.length;
+  lb.textContent=picked.length?`${picked.length}人が抜ける（${picked.join('・')}番）`:'番号を選んでください';
+  const t=tally(st.rounds.slice(0,st.cur+1));
+  $('#countBox').innerHTML=st.players.map(p=>`<button type="button" class="${p.id===S.me?'mine':''}${p.active?'':' left'}" data-p="${esc(p.id)}" aria-label="${esc(p.no)}番 ${t.played[p.id]||0}回"><b>${esc(p.no)}</b><span>${t.played[p.id]||0}回</span></button>`).join('');
+  $('#tableNote').textContent=`今は${act.length}人です。追加した人は次の試合から入ります。`;
+}
+function setTab(tab){
+  S.tab=tab;
+  $$('#app [data-tab]').forEach(e=>e.hidden=e.dataset.tab!==tab);
+  $$('nav button').forEach(b=>b.setAttribute('aria-selected',b.dataset.go===tab));
+  window.scrollTo(0,0);
+}
+function showOnly(id){['home','missing','app'].forEach(x=>$('#'+x).hidden=x!==id)}
+let toastT;function toast(m){const t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,2600)}
+function qrInto(el,text){
+  if(!window.qrcode){el.textContent='QRコードを読み込めませんでした。リンクをコピーして共有してください。';return}
+  const q=qrcode(0,'M');q.addData(text);q.make();
+  const n=q.getModuleCount();let d='';
+  for(let r=0;r<n;r++)for(let c=0;c<n;c++)if(q.isDark(r,c))d+=`M${c} ${r}h1v1h-1z`;
+  el.innerHTML=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -2 ${n+4} ${n+4}" role="img" aria-label="共有用QRコード"><rect x="-2" y="-2" width="${n+4}" height="${n+4}" fill="#fff"/><path d="${d}" fill="#000"/></svg>`;
+}
+const baseUrl=()=>location.origin+location.pathname;
+const SHARE_TEXT='ダブルスの試合表です。ログインなしで見られます。';
+function renderShare(){
+  $('#sharePanel').hidden=!S.sync;
+  $('#localPanel').hidden=S.sync;
+  $('#editPanel').hidden=!S.sync||!S.key;
+  if(!S.sync)return;
+  const v=`${baseUrl()}#${S.room}`;
+  qrInto($('#qrView'),v);$('#urlView').value=v;
+  $('#lineBtn').href=`https://line.me/R/share?text=${encodeURIComponent(SHARE_TEXT+'\n'+v)}`;
+  $('#xBtn').href=`https://x.com/intent/tweet?text=${encodeURIComponent(SHARE_TEXT)}&url=${encodeURIComponent(v)}`;
+  $('#shareBtn').hidden=!navigator.share;
+  if(S.key)qrInto($('#qrEdit'),`${v}-${S.key}`);
+}
+async function copy(text){try{await navigator.clipboard.writeText(text);toast('コピーしました')}catch{toast('コピーできませんでした。リンクを長押ししてください')}}
+
+/* ---------- 操作 ---------- */
+$('#startBtn').onclick=()=>{
+  const{el,done,running}=timerStatus();
+  mutate(d=>{
+    const x=d.timer;
+    if(running){x.elapsed=Math.round(el*10)/10;x.startAt=null}
+    else{if(done)x.elapsed=0;x.startAt=Math.round(serverNow())}
+  });
+  keepAwake();
+};
+$('#resetBtn').onclick=()=>mutate(resetTimer);
+$('#buzzBtn').onclick=()=>{unlockAudio();ring();S.lastBuzz=(S.state.buzz||0)+1;mutate(d=>{d.buzz=S.lastBuzz})};
+function pickDur(){
+  const dur=+$('#minSel').value*60+(+$('#secSel').value),{running}=timerStatus();
+  mutate(d=>{d.timer.dur=dur;d.timer.elapsed=0;d.timer.startAt=running?Math.round(serverNow()):null});
+  document.activeElement?.blur?.();
+}
+$('#minSel').onchange=pickDur;$('#secSel').onchange=pickDur;
+$('#soundBtn').onclick=()=>{S.sound=!S.sound;store.set('doubles.sound.'+(S.room||'local'),S.sound);if(S.sound){unlockAudio();ring()}render()};
+function goNext(){mutate(d=>{d.cur++;while(d.rounds.length<d.cur+1+LOOK)d.rounds.push(buildRound(d,d.rounds));resetTimer(d)})}
+$('#nextBtn').onclick=e=>{
+  if(timerStatus().running||e.currentTarget.dataset.armed)armed(e.currentTarget,'タイマー中。もう一度押す',goNext);
+  else goNext();
+};
+$('#prevBtn').onclick=()=>mutate(d=>{if(d.cur>0){d.cur--;resetTimer(d)}});
+$$('nav button').forEach(b=>b.onclick=()=>setTab(b.dataset.go));
+$('#app').addEventListener('click',e=>{
+  const b=e.target.closest('[data-p]');if(!b)return;
+  const id=b.dataset.p;
+  if(editor()){openSheet(id);return}
+  const off=S.me===id;
+  setMe(off?null:id);
+  toast(off?'自分の番号の設定を外しました':`${P(id).no}番を自分の番号にしました`);
+});
+$('#addMinus').onclick=()=>{S.addN=Math.max(1,S.addN-1);renderSetup()};
+$('#addPlus').onclick=()=>{S.addN=Math.min(20,S.addN+1);renderSetup()};
+$('#addBtn').onclick=async()=>{
+  const n=S.addN;
+  S.addN=1;renderSetup();
+  if(editor()){
+    await mutate(d=>{for(let i=0;i<n;i++){const no=Math.max(0,...d.players.map(p=>p.no))+1;d.players.push({id:'x'+randId(6),no,active:true,base:null})}});
+    toast(`${n}人追加しました。次の試合から入ります`);return;
+  }
+  try{
+    const ids=[];
+    for(let i=0;i<n;i++){
+      const id='j'+randId(8),r=await api('POST','',{id:S.room,join:{id}});
+      if(!r.rev){toast('追加できませんでした');break}
+      ids.push(id);
+    }
+    if(!ids.length)return;
+    await pull(true);
+    if(ids.length===1){setMe(ids[0]);toast(`${P(ids[0]).no}番で参加しました`);setTab('now')}
+    else toast(`${ids.length}人追加しました。次の試合から入ります`);
+  }catch{toast('通信できません')}
+};
+$('#courtSel').onchange=e=>{
+  const n=+e.target.value;
+  e.target.blur();
+  mutate(d=>{d.courtNos=Array.from({length:n},(_,i)=>i+1);regen(d)});
+  toast(`次の試合から${n}コートになります`);
+};
+function armed(btn,msg,run){
+  if(btn.dataset.armed){clearTimeout(btn._t);delete btn.dataset.armed;btn.textContent=btn._label;run();return}
+  btn._label=btn.textContent;btn.dataset.armed='1';btn.textContent=msg;
+  btn._t=setTimeout(()=>{delete btn.dataset.armed;btn.textContent=btn._label},3000);
+}
+function setMe(id){S.me=id;store.set('doubles.me.'+(S.room||'local'),id);render()}
+function openSheet(id){
+  const p=P(id);S.sheet=id;
+  $('#sheetTitle').textContent=`${p.no}番`;
+  $('#sheetActive').textContent=p.active?'抜ける（次の試合から）':'戻す（次の試合から）';
+  $('#sheetMe').textContent=S.me===id?'自分の番号の設定を外す':'この番号を自分にする';
+  $('#scrim').hidden=false;
+}
+const closeSheet=()=>$('#scrim').hidden=true;
+$('#sheetClose').onclick=closeSheet;
+$('#scrim').addEventListener('click',e=>{if(e.target.id==='scrim')closeSheet()});
+$('#sheetMe').onclick=()=>{setMe(S.me===S.sheet?null:S.sheet);closeSheet()};
+function comeBack(d,p){
+  p.active=true;
+  const t=tally(d.rounds.slice(0,d.cur+1)),gap=avgGames(d)-((p.base||0)+(t.played[p.id]||0));
+  if(gap>0)p.base=(p.base||0)+gap;
+}
+$('#sheetActive').onclick=()=>{const id=S.sheet;closeSheet();mutate(d=>{
+  const p=d.players.find(x=>x.id===id);if(!p)return;
+  if(p.active)p.active=false;else comeBack(d,p);
+  regen(d);
+})};
+$('#leaveGrid').addEventListener('click',e=>{
+  const b=e.target.closest('[data-leave]');if(!b)return;
+  const id=b.dataset.leave;
+  if(S.leave.has(id))S.leave.delete(id);else S.leave.add(id);
+  renderSetup();
+});
+$('#leaveBtn').onclick=()=>{
+  const ids=[...S.leave],nos=ids.map(id=>P(id).no).sort((a,b)=>a-b);
+  if(!ids.length)return;
+  S.leave.clear();
+  mutate(d=>{d.players.forEach(p=>{if(ids.includes(p.id))p.active=false});regen(d)});
+  toast(`${nos.join('・')}番は次の試合から外れます`);
+};
+$('#backGrid').addEventListener('click',e=>{
+  const b=e.target.closest('[data-back]');if(!b)return;
+  const id=b.dataset.back,no=P(id).no;
+  mutate(d=>{const p=d.players.find(x=>x.id===id);if(p&&!p.active){comeBack(d,p);regen(d)}});
+  toast(`${no}番は次の試合から戻ります`);
+});
+$('#rebuildBtn').onclick=e=>armed(e.currentTarget,'もう一度押すと全員の組み合わせが変わります',()=>{mutate(d=>regen(d,d.cur));toast('組み直しました')});
+$('#copyView').onclick=async()=>{
+  const el=$('#urlView');
+  try{await navigator.clipboard.writeText(el.value);toast('URLをコピーしました。好きな連絡手段に貼り付けてください')}
+  catch{el.focus();el.select();toast('URLを選択しました。長押しでコピーしてください')}
+};
+$('#urlView').onclick=e=>e.target.select();
+$('#shareBtn').onclick=async()=>{
+  const url=`${baseUrl()}#${S.room}`;
+  try{await navigator.share({title:'ダブルス試合表',text:SHARE_TEXT,url})}
+  catch(e){if(e&&e.name!=='AbortError')toast('共有できませんでした。URLをコピーして送ってください')}
+};
+$('#copyEdit').onclick=()=>copy(`${baseUrl()}#${S.room}-${S.key}`);
+$('#homeLink').onclick=e=>armed(e.currentTarget,'もう一度押すと、この試合表を閉じます',()=>{location.hash='';route()});
+$('#pastBtn').onclick=()=>{S.showPast=!S.showPast;renderTable()};
+$('#missingHome').onclick=()=>{location.hash='';route()};
+
+/* ---------- ホーム ---------- */
+let homeC=2,homeN=9;
+function renderHome(){
+  homeC=Math.min(6,Math.max(1,homeC));homeN=Math.min(60,Math.max(4,homeN));
+  $('#cVal').textContent=homeC;$('#nVal').textContent=homeN;
+  $('#cMinus').disabled=homeC<=1;$('#cPlus').disabled=homeC>=6;$('#nMinus').disabled=homeN<=4;$('#nPlus').disabled=homeN>=60;
+  const used=Math.min(homeC,Math.floor(homeN/4));
+  const half='<div><i class="dot"></i><i class="dot"></i></div>';
+  $('#preview').innerHTML=`<div class="mini">${half}${half}</div>`.repeat(used);
+  $('#hint').textContent=`同時に${used*4}人が試合${used<homeC?`（${homeC}コートのうち${used}コートを使います）`:''}。あとから途中参加できます。`;
+}
+$('#cMinus').onclick=()=>{homeC--;renderHome()};$('#cPlus').onclick=()=>{homeC++;renderHome()};
+$('#nMinus').onclick=()=>{homeN--;renderHome()};$('#nPlus').onclick=()=>{homeN++;renderHome()};
+$('#createBtn').onclick=async()=>{
+  const st=newState(homeC,homeN),btn=$('#createBtn');
+  if(!S.sync){S.state=st;enterApp();return}
+  btn.disabled=true;
+  const room=randId(10),key=randId(14);
+  try{
+    const r=await api('POST','',{id:room,key,base:0,state:st});
+    if(!r.rev)throw 0;
+    location.hash=`${room}-${key}`;
+    await route();
+    setTab('now');
+  }catch{toast('作成できませんでした。電波を確認してください')}
+  btn.disabled=false;
+};
+/* ---------- 起動 ---------- */
+function enterApp(){
+  S.me=store.get('doubles.me.'+(S.room||'local'));
+  const saved=store.get('doubles.sound.'+(S.room||'local'));
+  S.sound=saved==null?editor():saved;
+  S.lastBuzz=null;S.lastDone=null;S.lastStart=null;S.leave.clear();S.showPast=false;
+  showOnly('app');setSync('ok');setTab('now');onState();renderShare();
+  clearInterval(S.timerId);S.timerId=setInterval(tick,200);
+  startPolling();keepAwake();
+}
+function showHome(){
+  stopPolling();clearInterval(S.timerId);S.room=S.key=S.state=null;S.rev=0;
+  showOnly('home');renderHome();
+  const n=$('#homeNote');
+  n.hidden=S.sync;
+  n.textContent=S.storageReady===false&&S.sync===false&&S.hasApi?'同期用データベースが未設定のため、このスマホの中だけで動きます。':'お試し版です。このスマホの中だけで動きます。';
+}
+async function route(){
+  const m=location.hash.slice(1).match(/^([a-z0-9]{6,16})(?:-([a-z0-9]{8,24}))?$/);
+  if(!m||!S.sync){showHome();return}
+  S.room=m[1];S.key=m[2]||null;S.rev=0;S.state=null;S.joins=[];
+  await pull(true);
+  if(S.state){enterApp()}
+  else if($('#missing').hidden&&$('#app').hidden){showOnly('missing')}
+}
+window.addEventListener('hashchange',()=>{const want=location.hash.slice(1);if(want.split('-')[0]!==S.room||(want.split('-')[1]||null)!==S.key)route()});
+(async()=>{
+  try{
+    if(/^https?:$/.test(location.protocol)){
+      const r=await fetch(API+'?ping=1',{cache:'no-store'});
+      const j=await r.json();
+      S.hasApi=true;S.storageReady=!!j.storage;S.sync=!!j.storage;
+    }
+  }catch{S.sync=false}
+  route();
+})();
+</script>
+</body>
+</html>

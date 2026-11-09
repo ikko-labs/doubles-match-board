@@ -1,0 +1,6 @@
+{
+  "name": "doubles-match-board",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" }
+}
