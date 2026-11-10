@@ -3,6 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<script>
+  window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+  // 操作用キーを含む # 以降は解析に送らない
+  window.va('beforeSend', function (e) { return Object.assign({}, e, { url: String(e.url).split('#')[0] }); });
+</script>
+<script defer src="/_vercel/insights/script.js"></script>
 </head>
 <body>
 <title>ダブルス試合表</title>
